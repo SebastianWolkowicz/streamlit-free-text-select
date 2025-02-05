@@ -3,8 +3,14 @@ This component implements a selectbox that allows free text input. It is based o
 component.
 
 ## Installation
+
+clone the repo, go to the directory. 
+run in the terminal: 
+
 ```bash
-pip install streamlit-free-text-select
+cd ./streamlit_free_text_select
+pip install -e .
+
 ```
 
 ## Usage
