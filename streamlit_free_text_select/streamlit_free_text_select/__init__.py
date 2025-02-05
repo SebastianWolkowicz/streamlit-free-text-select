@@ -24,6 +24,8 @@ def st_free_text_select(
     index: Optional[int] = None,
     format_func: Optional[Callable] = None,
     placeholder: Optional[str] = None,
+    multi: Optional[bool] = False, 
+    creatable: Optional[bool] = False, 
     disabled: bool = False,
     delay: int = 300,
     key=None,
@@ -46,6 +48,10 @@ def st_free_text_select(
         A string to display when the input is empty, defaults to None.
     disabled : bool
         Whether the input is disabled, defaults to False.
+    multi : bool
+        Whether allow multiple selection.
+    creatable : bool
+        Whether allow user to add new .
     delay : int
         The time in milliseconds to wait before updating the component, defaults to 300.
     key : str
@@ -91,6 +97,8 @@ def st_free_text_select(
         options=options,
         index=index,
         placeholder=placeholder,
+        multi=multi, 
+        creatable= creatable, 
         disabled=disabled,
         delay=delay,
         key=key,

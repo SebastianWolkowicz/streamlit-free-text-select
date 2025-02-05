@@ -1,5 +1,6 @@
 import React, { ReactNode } from "react";
-import Select from "react-select";
+import Select, { ClearIndicatorProps, CSSObjectWithLabel, GroupBase, StylesConfig, MultiValue, ActionMeta, InputActionMeta } from "react-select";
+import Creatable, { useCreatable } from 'react-select/creatable';
 import {
   ComponentProps,
   Streamlit,
@@ -7,19 +8,20 @@ import {
   withStreamlitConnection
 } from "streamlit-component-lib";
 import FreeTextSelectStyle from "./styling";
+import CreatableSelect from "react-select/creatable";
 
 
 interface State {
   isFocused: boolean
   extended: boolean;
-  selectedOption: OptionType | null;
-  inputOption: String | null;
+  selectedOption: OptionType[];
+  inputOption: string | null;
 }
 
 
 interface OptionType {
-  label: String | null;
-  value: String | null;
+  label: string | null;
+  value: string | null;
   userInput: boolean | null;
 }
 
@@ -33,10 +35,10 @@ class FreeTextSelect extends StreamlitComponentBase<State> {
     this.state = {
       isFocused: false,
       extended: false,
-      selectedOption: (props.args.index !== null) ? options[props.args.index] : null,
+      selectedOption: (props.args.index !== null) ? [options[props.args.index]] : [],
       inputOption: null,
     }
-    if (this.state.selectedOption) {
+    if (this.state.selectedOption.length > 0) {
       this._updateComponent(this.state.selectedOption);
     }
 
@@ -50,6 +52,7 @@ class FreeTextSelect extends StreamlitComponentBase<State> {
   public render = (): ReactNode => {
     const debouncedInputChange = this._debounce(this._handleInputChange, this.props.args.delay);
 
+
     return (
       <div style={this.style.wrapper}>
         {this.props.args.label_visibility !== "collapsed" && (
@@ -59,25 +62,40 @@ class FreeTextSelect extends StreamlitComponentBase<State> {
             </label>
           </div>
         )}
-        <Select
+        <Creatable<OptionType, true>
+
           id={this.props.args.key ? this.props.args.key : "free-text-selectbox"}
           value={this.state.selectedOption}
           placeholder={this.props.args.placeholder}
           options={this._getOptions()}
-          styles={this.style.select}
+          styles={{
+            ...this.style.select,
+            multiValue: (base: CSSObjectWithLabel) => ({
+              ...base,
+              margin: '5px',
+            }),
+            multiValueLabel: (base: CSSObjectWithLabel) => ({
+              ...base,
+              whiteSpace: 'normal',
+            }),
+          } as StylesConfig<OptionType, true, GroupBase<OptionType>>}
           components={{
-            ClearIndicator: (props) => this.style.clearIndicator(props),
+            ClearIndicator: (props: ClearIndicatorProps<OptionType, true, GroupBase<OptionType>>) =>
+              this.style.clearIndicator(props),
             DropdownIndicator: () => this.style.iconDropdown(this.state.extended),
             IndicatorSeparator: () => <div></div>,
           }}
-          onChange={(event: any) => { this._handleOnChange(event) }}
+          onChange={(newValue: MultiValue<OptionType>, actionMeta: ActionMeta<OptionType>) => {
+            return this._handleOnChange(Array.from(newValue || []));
+          }}
           onInputChange={
-            (event: any, action: any) => {
-              if (action.action === "input-change") {
-                debouncedInputChange(event);
+            (inputValue: string, actionMeta: InputActionMeta) => {
+              if (actionMeta.action === "input-change") {
+                debouncedInputChange(inputValue);
               }
             }
           }
+          onKeyDown={this._handleKeyDown}
           isClearable={true}
           isSearchable={true}
           onMenuOpen={() => this.setState({ extended: true })}
@@ -85,9 +103,14 @@ class FreeTextSelect extends StreamlitComponentBase<State> {
           menuIsOpen={this.state.extended}
           isDisabled={this.props.args.disabled}
           menuPlacement="auto"
+          isMulti={this.props.args.multi}
         />
       </div>
-    );
+    )
+
+
+
+      ;
   };
 
   private _getOptionsFromArgs(): OptionType[] {
@@ -98,45 +121,86 @@ class FreeTextSelect extends StreamlitComponentBase<State> {
 
   private _getOptions(): OptionType[] {
     let options = this._getOptionsFromArgs();
-    if (
-      !options.some(option => option.value === this.state.selectedOption?.value)
-      && !this.state.selectedOption?.userInput
-      && this.state.selectedOption?.value !== null
-    ) {
-      this._handleOnChange(null);
-    }
-    if (this.state.inputOption !== null) {
+
+    if (this.state.inputOption !== null && this.state.inputOption.trim() !== "") {
+      options = options.filter(option => option.label?.toLowerCase().includes(this.state.inputOption!.toLowerCase()));
+      options.unshift({ label: `Select all matching elements`, value: "select_all_matching", userInput: false });
       options.unshift({ label: this.state.inputOption, value: this.state.inputOption, userInput: true });
+    } else {
+      options.unshift({ label: `Select all elements`, value: "select_all", userInput: false });
     }
+
     return options;
   }
 
-  private _handleOnChange(option: OptionType | null): void {
+
+  private _handleInputChange(inputValue: string): void {
+    this.setState({ inputOption: inputValue });
+    this.setState({ extended: false });
+    this.setState({ extended: true });
+
+  }
+
+
+
+
+  // private _handleInputChange(inputValue: string): void {
+  //   const options = this._getOptions();
+  //   const matchedOption = options.find(option => option.label === inputValue);
+
+  //   if (!matchedOption && inputValue.trim() !== "") {
+  //     const newOption = { label: inputValue, value: inputValue, userInput: true };
+  //     this.setState(prevState => ({
+  //       selectedOption: [...prevState.selectedOption, newOption]
+  //     }));
+  //     this._updateComponent([...this.state.selectedOption, newOption]);
+  //   }
+  // }
+
+  private _handleOnChange(option: OptionType[] | null): void {
     if (option === null) {
-      if (this.state.selectedOption !== null) {
-        option = { label: null, value: null, userInput: false };
-        this._updateInputOption(option);
-        this.setState({ selectedOption: null });
-        this._updateComponent(option);
+      if (this.state.selectedOption.length > 0) {
+        this.setState({ selectedOption: [] });
+        this._updateComponent([]);
       }
     } else {
-      this._updateComponent(option);
-      this.setState({ selectedOption: option });
+      if (option.some(opt => opt.value === "select_all")) {
+        const allOptions = this._getOptionsFromArgs();
+        this.setState({ selectedOption: allOptions });
+        this._updateComponent(allOptions);
+      } else if (option.some(opt => opt.value === "select_all_matching")) {
+        const matchingOptions = this._getOptionsFromArgs().filter(opt => opt.label?.toLowerCase().includes(this.state.inputOption!.toLowerCase()));
+        this.setState({ selectedOption: matchingOptions });
+        this._updateComponent(matchingOptions);
+      } else {
+        this._updateComponent(option);
+        this.setState({ selectedOption: option });
+      }
     }
   }
 
-  private _handleInputChange(value: String): void {
-    let option: OptionType = { label: value, value: value, userInput: true };
-    this._updateComponent(option);
-    this._updateInputOption(option);
-    this.setState({ selectedOption: option });
+  private _handleKeyDown(event: React.KeyboardEvent): void {
+    if (event.key === 'Enter' && this.state.inputOption) {
+      const options = this._getOptions();
+      const matchedOption = options.find(option => option.label === this.state.inputOption);
+
+      if (!matchedOption && this.state.inputOption.trim() !== "") {
+        const newOption = { label: this.state.inputOption, value: this.state.inputOption, userInput: true };
+        this.setState(prevState => ({
+          selectedOption: [...prevState.selectedOption, newOption],
+          inputOption: null
+        }));
+        this._updateComponent([...this.state.selectedOption, newOption]);
+      }
+    }
   }
 
-  private _updateComponent(option: OptionType): void {
-    if (option.value === null || option.value === "" || option.value === undefined) {
+
+  private _updateComponent(options: OptionType[]): void {
+    if (options.length === 0) {
       Streamlit.setComponentValue(null);
     } else {
-      Streamlit.setComponentValue(option.value);
+      Streamlit.setComponentValue(options.map(option => option.value));
     }
   }
 
